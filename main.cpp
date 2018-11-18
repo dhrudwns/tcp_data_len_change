@@ -19,7 +19,7 @@
 
 using namespace std;
 
-static uint32_t data_len;
+static int data_len;
 static uint32_t flag = 0;
 static uint32_t new_data_len;
 static string from_string, too_string;
@@ -113,7 +113,7 @@ static uint32_t print_pkt (struct nfq_data *tb)
     if (ph) {
             id = ntohl(ph->packet_id);
         }
-        
+
     ret = nfq_get_payload(tb, &data);
     if(ret >= 0) {
         new_data = data;
@@ -122,33 +122,46 @@ static uint32_t print_pkt (struct nfq_data *tb)
             struct tcp_hdr* tcph = (struct tcp_hdr *)((uint8_t*)iph+iph->ip_hl*4);
             uint16_t payload_len =ntohs(iph->ip_len) - (iph->ip_hl*4) - (tcph->th_off*4);
             uint8_t* payload = (uint8_t*)tcph+tcph->th_off*4;
+            uint16_t len = (iph->ip_hl * 4)+(tcph->th_off * 4);
             if(ntohs(tcph->th_sport) == 80 && payload_len>0){
+                string s_data((char*)payload, payload_len);
                 flowmanage flow{iph->ip_src, iph->ip_dst, tcph->th_sport, tcph->th_dport};
                 map<flowmanage, uint32_t>::iterator r_iter;
                 static regex pattern(from_string);
-                string s_data((char*)payload, ntohs(iph->ip_hl));
                 smatch m;
+                data_len = from_string.length() - too_string.length();
+                /*
                 if(regex_search(s_data, m, pattern)) {
                    data_len = from_string.length() - too_string.length();
                    flow_check[flow] = data_len;
                    s_data = regex_replace(s_data, pattern, too_string);
-                   iph->ip_len -= data_len;
                    tcph->th_seq -= data_len;
                    memcpy(payload, s_data.c_str(), s_data.length());
-                   calIPChecksum(new_data);
-                   calTCPChecksum(new_data ,iph->ip_len);
-                   new_data_len = iph->ip_len;
+                   calTCPChecksum(new_data ,len+s_data.length());
+                   new_data_len = len+s_data.length();
                    flag = 1;
                 }
+                */
+                size_t pos=0;
+                while((pos = s_data.find(from_string, pos)) != string::npos){
+                    s_data.replace(pos, from_string.length(), too_string);
+                    pos += too_string.length();
+                }
+                flow_check[flow] = data_len;
+                memcpy(payload, s_data.c_str(), s_data.length());
+                calTCPChecksum(new_data , len+s_data.length());
+                new_data_len = len+s_data.length();
+                flag = 1;
+
                 flow.reverse(flow);
                 r_iter = flow_check.find(flow);
                 if(r_iter!=flow_check.end())
                 {
-                    iph->ip_len += data_len;
+
                     tcph->th_ack += data_len;
                     calIPChecksum(new_data);
-                    calTCPChecksum(new_data ,iph->ip_len);
-                    new_data_len = iph->ip_len;
+                    calTCPChecksum(new_data ,ret);
+                    new_data_len = ret;
                     flag = 1;
                 }
             }
