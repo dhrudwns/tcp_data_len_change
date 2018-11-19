@@ -4,11 +4,11 @@
 #include <string.h>
 #include <regex>
 #include <unistd.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
+#include <netinet/in.h> //  struct in_addr
+#include <arpa/inet.h> //  inet_addr (), inet_ntoa (), inet_aton () ...
 #include <linux/types.h>
 #include <linux/netfilter.h>
-#include <set>
+#include <map>
 #include <errno.h>
 #include <netinet/in_systm.h>
 #define LIBNET_LIL_ENDIAN 1
@@ -19,21 +19,11 @@
 
 using namespace std;
 
-static int data_len;
 static uint32_t flag = 0;
 static uint32_t new_data_len;
 static string from_string, too_string;
 static uint8_t* new_data;
 static map<flowmanage, uint32_t> flow_check;
-
-void dump(unsigned char* buf, int size) {
-    int i;
-    for (i = 0; i < size; i++) {
-        if (i % 16 == 0)
-            printf("\n");
-            printf("%02x ", buf[i]);
-    }
-}
 
 #pragma pack(push,1)
 struct Pseudoheader{
@@ -132,7 +122,7 @@ static uint32_t print_pkt (struct nfq_data *tb)
                 smatch m;
                 if(regex_search(s_data, m, pattern)){
                         s_data = regex_replace(s_data, pattern, too_string);
-                        flow_check[flow] += s_data.length() - (ret - len);
+                        flow_check[flow] += s_data.length() - payload_len;
                         tcph->th_seq += htonl(iter->second);
                         memcpy(payload, s_data.c_str(), s_data.length());
                         calTCPChecksum(new_data , len + s_data.length());
